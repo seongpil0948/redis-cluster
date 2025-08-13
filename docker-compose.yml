@@ -1,75 +1,77 @@
 version: '3'
+
+x-redis-common: &redis_common
+  image: &redis_image redis:5.0.6-alpine
+  command: &redis_server_cmd redis-server /etc/redis/redis.conf
+  networks:
+    - dev_net
+
 services:
   redis-1:
+    <<: *redis_common
     container_name: "redis-1"
-    image: redis:latest
     ports:
       - 7001:7001
       - 17001:17001
     volumes:
-      - "./7001/conf/redis.conf:/etc/redis.conf"
+      - "./7001/conf/redis.conf:/etc/redis/redis.conf"
       - "./7001/data:/data"
-    command: redis-server /etc/redis.conf
 
   redis-2:
+    <<: *redis_common
     container_name: "redis-2"
-    image: redis:latest
     ports:
       - 7002:7002
       - 17002:17002
     volumes:
-      - "./7002/conf/redis.conf:/etc/redis.conf"
+      - "./7002/conf/redis.conf:/etc/redis/redis.conf"
       - "./7002/data:/data"
-    command: redis-server /etc/redis.conf
 
   redis-3:
+    <<: *redis_common
     container_name: "redis-3"
-    image: redis:latest
     ports:
       - 7003:7003
       - 17003:17003
     volumes:
-      - "./7003/conf/redis.conf:/etc/redis.conf"
+      - "./7003/conf/redis.conf:/etc/redis/redis.conf"
       - "./7003/data:/data"
-    command: redis-server /etc/redis.conf
 
   redis-4:
+    <<: *redis_common
     container_name: "redis-4"
-    image: redis:latest
     ports:
       - 7004:7004
       - 17004:17004
     volumes:
-      - "./7004/conf/redis.conf:/etc/redis.conf"
+      - "./7004/conf/redis.conf:/etc/redis/redis.conf"
       - "./7004/data:/data"
-    command: redis-server /etc/redis.conf
 
   redis-5:
+    <<: *redis_common
     container_name: "redis-5"
-    image: redis:latest
     ports:
       - 7005:7005
       - 17005:17005
     volumes:
-      - "./7005/conf/redis.conf:/etc/redis.conf"
+      - "./7005/conf/redis.conf:/etc/redis/redis.conf"
       - "./7005/data:/data"
-    command: redis-server /etc/redis.conf
 
   redis-6:
+    <<: *redis_common
     container_name: "redis-6"
-    image: redis:latest
     ports:
       - 7006:7006
       - 17006:17006
     volumes:
-      - "./7006/conf/redis.conf:/etc/redis.conf"
+      - "./7006/conf/redis.conf:/etc/redis/redis.conf"
       - "./7006/data:/data"
-    command: redis-server /etc/redis.conf
 
   redis-cluster-entry:
     container_name: "redis-cluster-entry"
-    image: redis:latest
-    command: redis-cli -h 10.101.91.145 -p 7001 --cluster create 10.101.91.145:7001 10.101.91.145:7002 10.101.91.145:7003 10.101.91.145:7004 10.101.91.145:7005 10.101.91.145:7006 --cluster-yes --cluster-replicas 1 & tail -f
+    image: *redis_image
+    command: >
+      sh -c "sleep 10 && redis-cli --cluster create redis-1:7001 redis-2:7002 redis-3:7003 redis-4:7004 redis-5:7005 redis-6:7006 --cluster-replicas 1 --cluster-yes"
     depends_on:
       - redis-1
       - redis-2
@@ -77,13 +79,15 @@ services:
       - redis-4
       - redis-5
       - redis-6
+    networks:
+      - dev_net
 
-  registry:
-    image: patrikx3/p3x-redis-ui:latest
+  p3x-redis-ui:
+    image: patrikx3/p3x-redis-ui:2025.4.136
     restart: always
     container_name: p3x-redis-ui
-#    ports:
-#      - "7843:7843"
+    ports:
+      - "7843:7843"
     volumes:
       - ./p3x-conf:/settings
     networks:
