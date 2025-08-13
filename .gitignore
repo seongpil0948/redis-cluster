@@ -1,3 +1,7 @@
-data/*
+*/data/*
 dump.rdb
 nodes.conf
+
+
+# python
+out.json

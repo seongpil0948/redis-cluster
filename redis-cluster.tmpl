@@ -8,6 +8,13 @@ tcp-backlog 511
 timeout 0
 tcp-keepalive 300
 
+# IMPORTANT: The following 'cluster-announce-*' settings are crucial for Docker.
+# They tell other nodes what IP/port to advertise. Since the Python client
+# runs on the host, we must announce an IP reachable from the host.
+cluster-announce-ip ${IP}
+cluster-announce-port ${PORT}
+cluster-announce-bus-port 1${PORT}
+
 ################################# GENERAL #####################################
 daemonize no
 supervised no

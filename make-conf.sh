@@ -1,7 +1,12 @@
-
 #!/bin/bash
-for port in {7001..7006}; 
+IP=0.0.0.0
+echo "Using IP: $IP"
+
+for i in `seq 6`
 do
-mkdir -p ./${port}/data;
-mkdir -p ./${port}/conf && PORT=${port} IP=10.101.91.145 envsubst < ./redis-cluster.tmpl > ./${port}/conf/redis.conf; 
+    port=$((7000 + i))
+    echo "Creating config for port ${port}"
+    mkdir -p ./${port}/data
+    mkdir -p ./${port}/conf
+    PORT=${port} IP=${IP} envsubst < ./redis-cluster.tmpl > ./${port}/conf/redis.conf
 done
