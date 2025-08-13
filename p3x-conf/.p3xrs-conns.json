@@ -1,0 +1,126 @@
+{
+    "update": "2025-07-17T06:03:23.454Z",
+    "list": [
+        {
+            "name": "더샵 개발",
+            "host": "10.101.91.145",
+            "port": 7001,
+            "askAuth": false,
+            "id": "P3Xid5714e9feb8101000848776b3583f55",
+            "tlsWithoutCert": false,
+            "tlsRejectUnauthorized": false,
+            "cluster": true,
+            "nodes": [
+                {
+                    "host": "10.101.91.145",
+                    "port": 7001,
+                    "id": "P3Xid13efa9feb810100007cfd67baeea5a"
+                },
+                {
+                    "host": "10.101.91.145",
+                    "port": 7002,
+                    "id": "P3Xide615250fb810100055ba67e8f33c41"
+                },
+                {
+                    "host": "10.101.91.145",
+                    "port": 7003,
+                    "id": "P3Xida243b9feb810100009b47b7356c464"
+                },
+                {
+                    "host": "10.101.91.145",
+                    "port": 7004,
+                    "id": "P3Xid3ff1c9feb810100087c2b93a72a83a"
+                },
+                {
+                    "host": "10.101.91.145",
+                    "port": 7005,
+                    "id": "P3Xidc332d9feb81010008d3014a676c455"
+                },
+                {
+                    "host": "10.101.91.145",
+                    "port": 7006,
+                    "id": "P3Xide47cd9feb810100004b7ba317a1065"
+                }
+            ]
+        },
+        {
+            "name": "더샵 운영",
+            "host": "10.101.99.20",
+            "port": 6400,
+            "askAuth": false,
+            "id": "P3Xid743f450fb81010009fd391b5636841",
+            "tlsWithoutCert": false,
+            "tlsRejectUnauthorized": true,
+            "cluster": true,
+            "nodes": [
+                {
+                    "host": "10.101.99.20",
+                    "port": 6400,
+                    "id": "P3Xidc7ed350fb81010002df15b51bba261"
+                },
+                {
+                    "host": "10.101.99.20",
+                    "port": 6401,
+                    "id": "P3Xid87989a0fb8101000879e60651e1ec9"
+                },
+                {
+                    "host": "10.101.99.21",
+                    "port": 6400,
+                    "id": "P3Xidee24450fb810100051d609a404c741"
+                },
+                {
+                    "host": "10.101.99.21",
+                    "port": 6401,
+                    "id": "P3Xidc38b9a0fb81010000a1a5b74e03539"
+                },
+                {
+                    "host": "10.101.99.22",
+                    "port": 6400,
+                    "id": "P3Xid8eb6450fb8101000008c44cc679041"
+                },
+                {
+                    "host": "10.101.99.22",
+                    "port": 6401,
+                    "id": "P3Xid96ee9a0fb81010007c908760f7d931"
+                }
+            ]
+        },
+        {
+            "name": "구샵 레디스(개발)",
+            "host": "10.101.91.165",
+            "port": 6379,
+            "askAuth": false,
+            "id": "P3Xid3e166d75c810100084819a0a8ecd3c",
+            "tlsWithoutCert": false,
+            "tlsRejectUnauthorized": true,
+            "cluster": false,
+            "nodes": [],
+            "password": "ejtiq12#"
+        },
+        {
+            "name": "구샵 레디스(운영)",
+            "host": "10.101.90.115",
+            "port": 6379,
+            "askAuth": false,
+            "password": "ejtiq12#",
+            "id": "P3Xid4a98c0e5d81010000c486e77963a8f",
+            "tlsWithoutCert": false,
+            "tlsRejectUnauthorized": true,
+            "cluster": false,
+            "nodes": []
+        },
+        {
+            "name": "LIMSABU",
+            "host": "redis-14637.c340.ap-northeast-2-1.ec2.redns.redis-cloud.com",
+            "port": 14637,
+            "askAuth": false,
+            "password": "2Mf5lUjAMD76yD2KSdhlWai4AEhhazd3",
+            "username": "default",
+            "id": "P3Xid937faf618910100083e29811911d9a",
+            "tlsWithoutCert": false,
+            "tlsRejectUnauthorized": true,
+            "cluster": false,
+            "nodes": []
+        }
+    ]
+}
