@@ -10,7 +10,7 @@ tcp-keepalive 300
 
 # IMPORTANT: The following 'cluster-announce-*' settings are crucial for Docker.
 # For Mac users, use 0.0.0.0 for cluster discovery and bind to 127.0.0.1
-cluster-announce-ip 0.0.0.0
+cluster-announce-ip ${IP}
 cluster-announce-port ${PORT}
 cluster-announce-bus-port 1${PORT}
 
@@ -45,8 +45,8 @@ replica-priority 100
 # requirepass foobared
 
 ############################## MEMORY MANAGEMENT ################################
-# maxmemory <bytes>
-# maxmemory-policy noeviction
+maxmemory 18gb
+maxmemory-policy allkeys-lru
 
 ############################# LAZY FREEING ####################################
 lazyfree-lazy-eviction no
@@ -55,7 +55,7 @@ lazyfree-lazy-server-del no
 replica-lazy-flush no
 
 ############################## APPEND ONLY MODE ###############################
-appendonly yes
+appendonly no
 appendfilename "appendonly_${PORT}.aof"
 appendfsync everysec
 no-appendfsync-on-rewrite no
@@ -70,7 +70,7 @@ lua-time-limit 5000
 ################################ REDIS CLUSTER  ###############################
 cluster-enabled yes
 cluster-config-file nodes-${PORT}.conf
-cluster-node-timeout 3000
+cluster-node-timeout 15000
 # cluster-replica-validity-factor 10
 # cluster-migration-barrier 1
 # cluster-require-full-coverage yes

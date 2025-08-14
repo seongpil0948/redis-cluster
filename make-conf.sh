@@ -1,6 +1,9 @@
 #!/bin/bash
-IP=0.0.0.0
+set -a
+source .env.local
+set +a
 echo "Using IP: $IP"
+
 
 for i in `seq 6`
 do

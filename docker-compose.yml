@@ -79,22 +79,13 @@ services:
       - redis-5
       - redis-6
 
-#networks:
-#  redis-cluster-net:
-#    driver: bridge
-
-
-#   p3x-redis-ui:
-#     image: patrikx3/p3x-redis-ui:2025.4.136
-#     restart: always
-#     container_name: p3x-redis-ui
-#     ports:
-#       - "7843:7843"
-#     volumes:
-#       - ./p3x-conf:/settings
-#     networks:
-#       - dev_net
-
-# networks:
-#   dev_net:
-#     external: true
+  p3x-redis-ui:
+    image: patrikx3/p3x-redis-ui:2025.4.136
+    restart: always
+    container_name: p3x-redis-ui
+    ports:
+      - "7843:7843"
+    volumes:
+      - ./p3x-conf:/settings
+    networks:
+      - dev_net

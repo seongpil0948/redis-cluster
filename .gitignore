@@ -1,8 +1,9 @@
 */data/*
 dump.rdb
 nodes.conf
-
+.*.local
 
 # python
 out.json
 cluster_info*.json
+polling_result*.json
