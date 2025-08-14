@@ -1,28 +1,83 @@
+from typing import Literal
 from redis.cluster import RedisCluster
 from redis.cluster import ClusterNode
+from datetime import datetime
 from redis.exceptions import RedisClusterException
 import json
+
+env: Literal[ "local","dev","prd"] = "local"
+
+local_nodes = [ClusterNode("localhost", port) for port in range(7001, 7007)]
+dev_nodes = [ClusterNode("10.101.91.145", port) for port in range(7001, 7007)] 
+prd_nodes = [
+    ClusterNode("10.101.99.20", 6400),
+    ClusterNode("10.101.99.20", 6401),
+    ClusterNode("10.101.99.21", 6400),
+    ClusterNode("10.101.99.21", 6401),
+    ClusterNode("10.101.99.22", 6400),
+    ClusterNode("10.101.99.22", 6401),
+]
+
+get_cluster_nodes = lambda: local_nodes if env == "local" else dev_nodes if env == "dev" else prd_nodes
+
+def get_cluster_key_counts(rc: RedisCluster):
+    """
+    Returns a dict with total key count across primaries and per-node counts.
+    Tries DBSIZE first; falls back to INFO keyspace parsing.
+    """
+    try:
+        sizes = rc.dbsize(target_nodes=RedisCluster.PRIMARIES)
+        total = 0
+        per_node = {}
+        if isinstance(sizes, dict):
+            for node, size in sizes.items():
+                node_name = f"{getattr(node, 'host', node)}:{getattr(node, 'port', '')}".rstrip(":")
+                per_node[node_name] = int(size)
+                total += int(size)
+        elif isinstance(sizes, (list, tuple)):
+            total = sum(int(s) for s in sizes)
+        else:
+            total = int(sizes)
+        return {"total": total, "per_node": per_node}
+    except Exception:
+        try:
+            infos = rc.info("keyspace", target_nodes=RedisCluster.PRIMARIES)
+            total = 0
+            per_node = {}
+            if isinstance(infos, dict):
+                for node, info in infos.items():
+                    node_name = f"{getattr(node, 'host', node)}:{getattr(node, 'port', '')}".rstrip(":")
+                    db0 = info.get("db0") or {}
+                    keys = int(db0.get("keys", 0))
+                    per_node[node_name] = keys
+                    total += keys
+            else:
+                db0 = infos.get("db0") or {}
+                total = int(db0.get("keys", 0))
+            return {"total": total, "per_node": per_node}
+        except Exception:
+            return {"total": None, "per_node": {}}
 
 def main():
     """
     Connects to a local Redis cluster, performs basic tests,
     and saves the results to a JSON file.
     """    
-    startup_nodes = [ClusterNode("localhost", port) for port in range(7001, 7007)]
-
+    nodes = get_cluster_nodes()
     redis_data = {
         "connection_info": {
             "status": "pending",
-            "nodes_tried": [f"{node.host}:{node.port}" for node in startup_nodes]
+            "nodes_tried": [f"{node.host}:{node.port}" for node in nodes]
         },
         "cluster_info": None,
         "cluster_nodes": None,
         "tests": {}
     }    
+    rc = None
     try:
         # decode_responses=True to get strings back from Redis instead of bytes
         print("Connecting to Redis cluster...")
-        rc = RedisCluster(startup_nodes=startup_nodes, decode_responses=True)
+        rc = RedisCluster(nodes=nodes, decode_responses=True)
 
         print("Connected to Redis cluster.")
         print("Cluster nodes:")
@@ -32,6 +87,9 @@ def main():
         redis_data["connection_info"]["status"] = "success"
         print("Successfully connected to the Redis cluster.")
 
+        # Record key counts BEFORE running tests
+        redis_data["key_counts"] = {"before": get_cluster_key_counts(rc)}
+
         # 1. Get cluster information
         redis_data["cluster_info"] = rc.cluster_info()
         redis_data["cluster_nodes"] = rc.cluster_nodes()
@@ -40,7 +98,7 @@ def main():
         # 2. Perform basic data tests
         # String
         print("Testing STRING operations...")
-        rc.set("test:string", "hello from gemini")
+        rc.set("test:string", "hello from SP")
         str_val = rc.get("test:string")
         redis_data["tests"]["string"] = {"set": "test:string", "get": str_val}
         # rc.delete("test:string") # Will be deleted at the end
@@ -111,18 +169,29 @@ def main():
             "test:multi:key2",
             "test:multi:key3"
         ]
-        for key in keys_to_delete:
-            try:
-                rc.delete(key)
-            except Exception as e:
-                print(f"Could not delete key '{key}': {e}")
-        print("Test keys cleaned up.")
+        if rc is not None:
+            for key in keys_to_delete:
+                try:
+                    rc.delete(key)
+                except Exception as e:
+                    print(f"Could not delete key '{key}': {e}")
+            print("Test keys cleaned up.")
 
-        # 3. Save all collected data to out.json
+            # Record key counts AFTER cleanup to assess retention
+            try:
+                redis_data.setdefault("key_counts", {})
+                redis_data["key_counts"]["after"] = get_cluster_key_counts(rc)
+            except Exception as e:
+                print(f"Could not collect post-cleanup key counts: {e}")
+        else:
+            print("Skipping cleanup and post-cleanup key count (no active Redis connection).")
+
+        # 3. Save all collected data to a JSON file with a timestamp
         try:
-            with open("out.json", "w", encoding="utf-8") as f:
+            timestamp = datetime.now().strftime("%m-%dT%H:%M")
+            with open(f"cluster_info_{timestamp}.json", "w", encoding="utf-8") as f:
                 json.dump(redis_data, f, indent=4, ensure_ascii=False)
-            print("Results have been saved to out.json")
+            print(f"Results have been saved to cluster_info_{timestamp}.json")
         except Exception as e:
             print(f"Failed to write results to out.json. Error: {e}")
 

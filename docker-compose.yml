@@ -1,13 +1,14 @@
 x-redis-common: &redis_common
   image: &redis_image redis:5.0.6-alpine
   command: redis-server /etc/redis/redis.conf
+  network_mode: "host"
   healthcheck:
     test: ["CMD", "redis-cli", "ping"]
+
 services:
   redis-1:
     <<: *redis_common
     container_name: "redis-1"
-    network_mode: "host"
     healthcheck:
       test: ["CMD", "redis-cli", "-h", "127.0.0.1", "-p", "7001", "ping"]
     volumes:
@@ -17,7 +18,6 @@ services:
   redis-2:
     <<: *redis_common
     container_name: "redis-2"
-    network_mode: "host"
     healthcheck:
       test: ["CMD", "redis-cli", "-h", "127.0.0.1", "-p", "7002", "ping"]
     volumes:
@@ -27,7 +27,6 @@ services:
   redis-3:
     <<: *redis_common
     container_name: "redis-3"
-    network_mode: "host"
     healthcheck:
       test: ["CMD", "redis-cli", "-h", "127.0.0.1", "-p", "7003", "ping"]
     volumes:
@@ -37,7 +36,6 @@ services:
   redis-4:
     <<: *redis_common
     container_name: "redis-4"
-    network_mode: "host"
     healthcheck:
       test: ["CMD", "redis-cli", "-h", "127.0.0.1", "-p", "7004", "ping"]
     volumes:
@@ -47,7 +45,6 @@ services:
   redis-5:
     <<: *redis_common
     container_name: "redis-5"
-    network_mode: "host"
     healthcheck:
       test: ["CMD", "redis-cli", "-h", "127.0.0.1", "-p", "7005", "ping"]
     volumes:
@@ -57,7 +54,6 @@ services:
   redis-6:
     <<: *redis_common
     container_name: "redis-6"
-    network_mode: "host"
     healthcheck:
       test: ["CMD", "redis-cli", "-h", "127.0.0.1", "-p", "7006", "ping"]
     volumes:
@@ -67,8 +63,14 @@ services:
   redis-cluster-entry:
     container_name: "redis-cluster-entry"
     image: *redis_image
+    network_mode: "host"
     command: >
-      sh -c "redis-cli --cluster create ${IP:-127.0.0.1}:7001 ${IP:-127.0.0.1}:7002 ${IP:-127.0.0.1}:7003 ${IP:-127.0.0.1}:7004 ${IP:-127.0.0.1}:7005 ${IP:-127.0.0.1}:7006 --cluster-replicas 1 --cluster-yes"
+      sh -c "
+        echo 'Waiting for Redis nodes to be ready...';
+        sleep 10;
+        echo 'Creating cluster with localhost IPs for external access...';
+        redis-cli --cluster create 127.0.0.1:7001 127.0.0.1:7002 127.0.0.1:7003 127.0.0.1:7004 127.0.0.1:7005 127.0.0.1:7006 --cluster-replicas 1 --cluster-yes
+      "
     depends_on:
       - redis-1
       - redis-2
@@ -76,6 +78,11 @@ services:
       - redis-4
       - redis-5
       - redis-6
+
+#networks:
+#  redis-cluster-net:
+#    driver: bridge
+
 
 #   p3x-redis-ui:
 #     image: patrikx3/p3x-redis-ui:2025.4.136

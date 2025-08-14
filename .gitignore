@@ -5,3 +5,4 @@ nodes.conf
 
 # python
 out.json
+cluster_info*.json

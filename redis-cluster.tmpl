@@ -9,9 +9,8 @@ timeout 0
 tcp-keepalive 300
 
 # IMPORTANT: The following 'cluster-announce-*' settings are crucial for Docker.
-# They tell other nodes what IP/port to advertise. Since the Python client
-# runs on the host, we must announce an IP reachable from the host.
-cluster-announce-ip ${IP}
+# For Mac users, use 0.0.0.0 for cluster discovery and bind to 127.0.0.1
+cluster-announce-ip 0.0.0.0
 cluster-announce-port ${PORT}
 cluster-announce-bus-port 1${PORT}
 
