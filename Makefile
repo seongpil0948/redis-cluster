@@ -13,27 +13,27 @@ gen-conf:
 # Start the Redis cluster in detached mode
 up: gen-conf
 	@echo "Starting Redis cluster..."
-	docker-compose up -d --force-recreate --remove-orphans
+	docker compose up -d --force-recreate --remove-orphans
 
 # Stop and remove the Redis cluster containers
 down:
 	@echo "Stopping Redis cluster..."
-	docker-compose down
+	docker compose down
 
 # Clean up all generated configuration and data
 clean:
 	@echo "Cleaning up Redis cluster configuration and data..."
-	docker-compose down -v
+	docker compose down -v
 	rm -rf 700*
 
 # View logs of all services
 logs:
-	docker-compose logs -f
+	docker compose logs -f
 
 # Build the docker images (if needed)
 build:
 	@echo "Building Docker images..."
-	docker-compose build
+	docker compose build
 
 # Run basic Redis cluster tests
 test-basic:

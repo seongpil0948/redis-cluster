@@ -89,3 +89,7 @@ services:
       - ./p3x-conf:/settings
     networks:
       - dev_net
+      
+networks:
+  dev_net:
+    external: true
