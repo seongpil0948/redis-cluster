@@ -25,7 +25,11 @@ def run_verify(args) -> int:
     if not all_rows:
         print("No keys found in backup.")
         return 1
-    sample = all_rows if len(all_rows) <= args.sample else random.sample(all_rows, args.sample)
+    sample = (
+        all_rows
+        if len(all_rows) <= args.sample
+        else random.sample(all_rows, args.sample)
+    )
 
     missing = 0
     ttl_mismatch = 0

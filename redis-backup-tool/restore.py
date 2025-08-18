@@ -48,7 +48,12 @@ def _apply_row(rc, row: dict[str, Any], overwrite: bool, recreate_groups: bool) 
         if recreate_groups:
             for g in row.get("groups", []) or []:
                 try:
-                    rc.xgroup_create(name=key, groupname=g.get("name"), id=g.get("last-delivered-id", "$"), mkstream=True)
+                    rc.xgroup_create(
+                        name=key,
+                        groupname=g.get("name"),
+                        id=g.get("last-delivered-id", "$"),
+                        mkstream=True,
+                    )
                 except Exception:
                     pass
     else:
@@ -91,7 +96,11 @@ def run_restore(args) -> int:
         if args.from_s3 == "by-id":
             if not args.backup_id:
                 raise SystemExit("--backup-id is required when using --from-s3 by-id")
-            match_key = f"{loc.prefix}/{args.backup_id}.tar.gz" if loc.prefix else f"{args.backup_id}.tar.gz"
+            match_key = (
+                f"{loc.prefix}/{args.backup_id}.tar.gz"
+                if loc.prefix
+                else f"{args.backup_id}.tar.gz"
+            )
             for item in backups:
                 if item["key"] == match_key:
                     chosen = item
@@ -100,6 +109,7 @@ def run_restore(args) -> int:
                 raise SystemExit(f"Backup id not found: {args.backup_id}")
         # Download and extract
         tar_local = Path(args.work_dir) / Path(chosen["key"]).name
+        print("Downloading backup from S3:", chosen["key"])
         download_file(s3, loc, Path(chosen["key"]).name, str(tar_local))
         input_dir = _extract_tar(tar_local, Path(args.work_dir))
     else:
@@ -108,7 +118,12 @@ def run_restore(args) -> int:
     # Restore
     count = 0
     for row in _iter_jsonl_parts(input_dir):
-        _apply_row(rc, row, overwrite=args.overwrite, recreate_groups=args.recreate_stream_groups)
+        _apply_row(
+            rc,
+            row,
+            overwrite=args.overwrite,
+            recreate_groups=args.recreate_stream_groups,
+        )
         count += 1
         if count % 1000 == 0:
             print(f"Restored {count} keys...")

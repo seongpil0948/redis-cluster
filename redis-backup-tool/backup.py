@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
-import os
 import random
 import tarfile
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from redis_utils import build_cluster_config, make_cluster_client, key_type, pttl_safe, now_millis
+from redis_utils import (
+    build_cluster_config,
+    make_cluster_client,
+    key_type,
+    pttl_safe,
+)
 from s3_utils import parse_s3_uri, get_s3_client, upload_file
 
 

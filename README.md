@@ -2,7 +2,11 @@
 
 This project now includes a dedicated tool for logical backup and restore of the Redis Cluster, with S3 integration. This tool allows you to:
 
--   Perform logical backups of all Redis data types, preserving TTLs and Stream Consumer Group metadata.
+-   Perform logical backups of all Redis data types, preserving TTLs and S### Notes and Known Issues
+
+- **Redis Cluster Data Distribution**: When manually inserting test data, always use `redis-cli -c` (cluster mode) to ensure data is properly distributed across all cluster nodes. Without the `-c` flag, all data will be stored on the node you directly connect to, which defeats the purpose of clustering.
+- Docker Desktop on macOS does not support `network_mode: host`. The `redis-1`…`redis-6` services in `docker-compose.yml` use host networking and are intended for Linux environments. On macOS, consider using Colima with host networking, or adapt the compose to bridge networking and adjust cluster creation accordingly.
+- The `p3x-redis-ui` service expects an external network `dev_net`. Create it once with `docker network create dev_net`, or switch it to the default network if you don't need an external shared network.m Consumer Group metadata.
 -   Restore data to a Redis Cluster, with options for overwriting existing keys and recreating stream groups.
 -   Upload backups to and download from S3.
 -   List available backups in an S3 bucket.
@@ -44,6 +48,25 @@ Notes:
   `aws ecr get-login-password --region $ECR_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY`
 
 If you get an AccessDeniedException on `ecr:GetAuthorizationToken`, verify that your profile/user or assumed role has ECR permissions (e.g., the managed policy `AmazonEC2ContainerRegistryPowerUser`) or a minimal inline policy allowing `ecr:GetAuthorizationToken` and push to the specific repository.
+
+### Using an Image from ECR in Make targets
+
+If you want to run the Makefile convenience targets (backup, restore, list) with the image hosted on ECR instead of a locally-built image, first pull and set the image name via `BACKUP_IMAGE`:
+
+```bash
+# Login and pull the image (uses ECR_REGISTRY/ECR_REPO/ECR_REGION/AWS_PROFILE)
+make pull-backup
+
+# Use the ECR image for subsequent runs
+export BACKUP_IMAGE="${ECR_REGISTRY}/${ECR_REPO}:latest"
+
+# Now run the helpers
+make backup-local-profile S3_URI=s3://theshop-lake-dev/backup/redis BACKUP_DIR=./backups
+make list-backups-profile S3_URI=s3://theshop-lake-dev/backup/redis
+make restore-latest-profile S3_URI=s3://theshop-lake-dev/backup/redis
+```
+
+Tip: You can also pass `BACKUP_IMAGE=...` inline per invocation instead of exporting it.
 
 ### Usage Examples
 
@@ -160,6 +183,17 @@ docker run --rm \
   -e S3_URI="s3://theshop-lake-dev/backup/redis" \
   -v /tmp/redis-backups:/data/backups \
   redis-backup-tool:latest backup --match "user:*" --chunk-keys 10000
+```
+
+**Important for Redis Cluster**: When inserting test data manually, always use the `-c` (cluster mode) flag with `redis-cli` to ensure proper data distribution across cluster nodes:
+
+```bash
+# Correct: Cluster-aware insertion (data distributed across nodes)
+redis-cli -h 10.101.99.145 -p 7001 -c set user:1 "value1"
+redis-cli -h 10.101.99.145 -p 7001 -c hmset profile:1 name "User1" email "user1@example.com"
+
+# Incorrect: Direct insertion (all data goes to one node)
+redis-cli -h 10.101.99.145 -p 7001 set user:1 "value1"  # Missing -c flag
 ```
 
 #### 2. Restore

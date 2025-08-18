@@ -1,5 +1,5 @@
 {
-    "update": "2025-07-17T06:03:23.454Z",
+    "update": "2025-08-18T06:16:02.958Z",
     "list": [
         {
             "name": "더샵 개발",
@@ -120,6 +120,20 @@
             "tlsWithoutCert": false,
             "tlsRejectUnauthorized": true,
             "cluster": false,
+            "nodes": []
+        },
+        {
+            "name": "Local",
+            "host": "10.101.99.145",
+            "port": 7001,
+            "askAuth": false,
+            "id": "P3Xid21012dbb89101000c5717634f35776",
+            "tlsWithoutCert": false,
+            "tlsRejectUnauthorized": false,
+            "ssh": false,
+            "sshPort": 22,
+            "cluster": false,
+            "sentinel": false,
             "nodes": []
         }
     ]

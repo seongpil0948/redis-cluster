@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
-from typing import Iterable
 
 from redis import Redis
 from redis.cluster import RedisCluster, ClusterNode
@@ -31,9 +30,13 @@ def default_nodes_for_profile(env_profile: str) -> list[tuple[str, int]]:
     )
 
 
-def build_cluster_config(env_profile: str | None, redis_nodes: str | None) -> ClusterConfig:
+def build_cluster_config(
+    env_profile: str | None, redis_nodes: str | None
+) -> ClusterConfig:
     profile = env_profile or os.environ.get("ENV_PROFILE", "local")
-    nodes = parse_nodes(redis_nodes) if redis_nodes else default_nodes_for_profile(profile)
+    nodes = (
+        parse_nodes(redis_nodes) if redis_nodes else default_nodes_for_profile(profile)
+    )
     return ClusterConfig(env_profile=profile, nodes=nodes)
 
 

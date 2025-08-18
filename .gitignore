@@ -2,6 +2,7 @@
 dump.rdb
 nodes.conf
 .*.local
+backups/*
 
 # python
 out.json

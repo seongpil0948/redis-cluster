@@ -37,7 +37,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     # backup
-    p_b = sub.add_parser("backup", help="Create logical backup and optionally upload to S3")
+    p_b = sub.add_parser(
+        "backup", help="Create logical backup and optionally upload to S3"
+    )
     add_common_env_args(p_b)
     p_b.add_argument("--match", default="*", help="Key pattern to match (default: *)")
     p_b.add_argument("--chunk-keys", type=int, default=5000, help="Keys per JSONL part")
@@ -60,13 +62,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Download backup from S3. Use 'by-id' with --backup-id, or 'latest'",
     )
     p_r.add_argument("--backup-id", help="Backup ID when using --from-s3 by-id")
-    p_r.add_argument("--overwrite", action="store_true", help="Overwrite existing keys on restore")
+    p_r.add_argument(
+        "--overwrite", action="store_true", help="Overwrite existing keys on restore"
+    )
     p_r.add_argument(
         "--recreate-stream-groups",
         action="store_true",
         help="Recreate stream consumer groups metadata",
     )
-    p_r.add_argument("--work-dir", default="/tmp", help="Working directory for downloads/extracts")
+    p_r.add_argument(
+        "--work-dir", default="/tmp", help="Working directory for downloads/extracts"
+    )
     p_r.set_defaults(func=run_restore)
 
     # list
@@ -75,9 +81,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_l.set_defaults(func=run_list)
 
     # verify
-    p_v = sub.add_parser("verify", help="Verify a backup directory against a live cluster")
+    p_v = sub.add_parser(
+        "verify", help="Verify a backup directory against a live cluster"
+    )
     add_common_env_args(p_v)
-    p_v.add_argument("-i", "--input", required=True, help="Local backup directory (extracted)")
+    p_v.add_argument(
+        "-i", "--input", required=True, help="Local backup directory (extracted)"
+    )
     p_v.add_argument("--sample", type=int, default=500, help="Number of keys to sample")
     p_v.set_defaults(func=run_verify)
 

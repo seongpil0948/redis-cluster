@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
-from typing import Iterable
 
 import boto3
 
@@ -41,7 +39,13 @@ def list_backups(s3: any, loc: S3Location) -> list[dict]:
         for obj in page.get("Contents", []):
             key = obj["Key"]
             if key.endswith(".tar.gz"):
-                items.append({"key": key, "last_modified": obj["LastModified"], "size": obj["Size"]})
+                items.append(
+                    {
+                        "key": key,
+                        "last_modified": obj["LastModified"],
+                        "size": obj["Size"],
+                    }
+                )
     items.sort(key=lambda x: x["last_modified"], reverse=True)
     return items
 
