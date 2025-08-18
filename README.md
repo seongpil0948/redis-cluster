@@ -1,117 +1,225 @@
-# Redis Cluster Development Environment
+## Redis Backup and Restore Tool
 
-This project provides a Docker-based Redis cluster for development and testing purposes. It sets up a 6-node cluster with 3 masters and 3 replicas, allowing for the simulation of a production-like Redis environment, including master-replica replication and failover testing.
+This project now includes a dedicated tool for logical backup and restore of the Redis Cluster, with S3 integration. This tool allows you to:
 
-## Features
+-   Perform logical backups of all Redis data types, preserving TTLs and Stream Consumer Group metadata.
+-   Restore data to a Redis Cluster, with options for overwriting existing keys and recreating stream groups.
+-   Upload backups to and download from S3.
+-   List available backups in an S3 bucket.
+-   Verify the integrity of a backup against a live cluster.
 
-- **6-Node Redis Cluster**: 3 master nodes and 3 replica nodes.
-- **Docker Compose**: Easily manage the entire cluster with Docker Compose.
-- **Production-like Configuration**: The Redis configuration is based on best practices for a production environment.
-- **P3X Redis UI**: Includes a web-based UI for easy management and monitoring of the cluster.
-- **Simplified Management**: A `Makefile` is provided to streamline common tasks.
+### Building the Backup Tool Image
 
-## Prerequisites
-
-- Docker
-- Docker Compose
-- A pre-existing external Docker network named `dev_net`. If you don't have one, you can create it with `docker network create dev_net`.
-
-## Getting Started
-
-Use the provided `Makefile` to manage the cluster. The `make up` command will automatically generate the necessary Redis configurations and start the cluster.
+The backup and restore tool is packaged as a Docker image.
 
 ```bash
-# Generate configs and start the cluster
-make up
-
-# Stop the cluster
-make down
-
-# Stop the cluster and remove all data
-make clean
-
-# View the logs of all services
-make logs
-
-# Manually generate Redis configurations
-make gen-conf
+make build-backup-tool
 ```
 
-## Accessing the Cluster
+This command builds the `redis-backup-tool:latest` Docker image.
 
--   **Redis Nodes**: The Redis nodes are accessible on ports `7001` through `7006` on your host machine.
--   **P3X Redis UI**: The web UI is available at `http://localhost:7843`.
+### Pushing to ECR (Elastic Container Registry)
 
-## Cluster Configuration
+To push the built image to AWS ECR, export the following and run the Make target. This example is verified working:
 
--   The Redis configuration is generated from the `redis-cluster.tmpl` template via the `make gen-conf` command.
--   The `make-conf.sh` script, called by the make target, generates the individual configuration files for each node in the `700x/conf` directories.
--   To customize the Redis configuration, modify the `redis-cluster.tmpl` file and regenerate the configurations with `make gen-conf`, then restart the cluster.
-
-## Redis Cluster Operational Commands
-
-Here are some common Redis commands useful for managing and troubleshooting the cluster. You can execute these commands using `redis-cli` within one of the Redis containers.
-
-To connect to a Redis node:
 ```bash
-docker exec -it redis-1 redis-cli -p 7001
+# Set your registry host (no repo path)
+export ECR_REGISTRY="008971653402.dkr.ecr.ap-northeast-2.amazonaws.com"
+
+# Set your repository path/name
+export ECR_REPO="util/redis-backup-tool"   # or just "redis-backup-tool"
+
+# Set region and (optionally) profile for login
+export ECR_REGION="ap-northeast-2"
+export AWS_PROFILE="toy-root" # optional; use a profile with ECR permissions
+
+# Build and push
+make push-backup-tool-to-ecr
 ```
-(Replace `redis-1` and `7001` with the desired node and port)
 
-### Cluster Information
+Notes:
+- `ECR_REGISTRY` must be the registry hostname only (e.g., `123456789012.dkr.ecr.ap-northeast-2.amazonaws.com`).
+- `ECR_REPO` is the repository path/name in ECR (e.g., `util/redis-backup-tool`).
+- If you prefer raw CLI, you can login with:
+  `aws ecr get-login-password --region $ECR_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY`
 
--   `CLUSTER INFO`: Provides general information about the cluster state.
-    ```bash
-    CLUSTER INFO
-    ```
--   `CLUSTER NODES`: Shows a list of all nodes in the cluster, their roles (master/replica), and their state.
-    ```bash
-    CLUSTER NODES
-    ```
+If you get an AccessDeniedException on `ecr:GetAuthorizationToken`, verify that your profile/user or assumed role has ECR permissions (e.g., the managed policy `AmazonEC2ContainerRegistryPowerUser`) or a minimal inline policy allowing `ecr:GetAuthorizationToken` and push to the specific repository.
 
-### Data Management
+### Usage Examples
 
--   `BGSAVE`: Forces a background save of the dataset to disk.
-    ```bash
-    BGSAVE
-    ```
--   `SAVE`: Synchronously saves the dataset to disk. (Caution: This command blocks the Redis server).
-    ```bash
-    SAVE
-    ```
+The `redis-backup-tool` can be run via `docker run`, supporting both command-line arguments and environment variables.
 
-### Troubleshooting and Monitoring
+**Common Environment Variables:**
 
--   `INFO`: Returns information and statistics about the server in a format that is simple to parse by computers and easy to read by humans.
-    ```bash
-    INFO
-    ```
--   `MONITOR`: Streams back every command processed by the Redis server. Useful for real-time debugging.
-    ```bash
-    MONITOR
-    ```
--   `SLOWLOG GET [count]`: Returns the Redis Slow Log. Useful for identifying slow queries.
-    ```bash
-    SLOWLOG GET 10
-    ```
--   `CLIENT LIST`: Returns a list of all connected clients (servers and clients).
-    ```bash
-    CLIENT LIST
-    ```
--   `CONFIG GET <parameter>`: Get the value of a configuration parameter.
-    ```bash
-    CONFIG GET maxmemory
-    ```
--   `CONFIG SET <parameter> <value>`: Set a configuration parameter to a new value.
-    ```bash
-    CONFIG SET maxmemory 1gb
-    ```
+-   `ENV_PROFILE`: `local|dev|prd` (specifies the Redis cluster environment profile)
+-   `REDIS_NODES`: `host1:port1,host2:port2,...` (overrides the default node list for the specified `ENV_PROFILE`)
+-   `S3_URI`: `s3://your-bucket-name/your-prefix` (S3 path for backup uploads and restore downloads)
+-   **AWS Credentials**: Prefer profile/role-based auth. You can provide credentials via:
+  -   **Shared Credentials/Profile**: Mount your `~/.aws` directory and pass `AWS_PROFILE` (and `AWS_SDK_LOAD_CONFIG=1`), e.g., `-v $HOME/.aws:/root/.aws:ro -e AWS_PROFILE=toy-root -e AWS_SDK_LOAD_CONFIG=1`.
+    -   **IAM Roles for Service Accounts (IRSA)**: For Kubernetes environments, configure an IRSA for the pod running the tool.
 
-### Cluster Resharding and Failover (Advanced)
+### Passing AWS Credentials with docker run
 
-These commands are for advanced cluster management and should be used with caution.
+Using shared credentials + profile
 
--   `redis-cli --cluster reshard <host>:<port> --from <node-id> --to <node-id> --slots <number-of-slots> --yes`: Reshards hash slots from one node to another.
--   `redis-cli --cluster failover <host>:<port>`: Forces a manual failover of a master node.
+```bash
+export AWS_PROFILE=toy-root           # or another profile name
 
-Remember to replace `<host>:<port>` and `<node-id>` with actual values from your cluster.
+docker run --rm \
+  -e ENV_PROFILE=local \
+  -e S3_URI="s3://theshop-lake-dev/backup/redis" \
+  -e AWS_PROFILE \
+  -e AWS_SDK_LOAD_CONFIG=1 \
+  -v "$HOME/.aws:/root/.aws:ro" \
+  -v /tmp/redis-backups:/data/backups \
+  redis-backup-tool:latest backup
+```
+
+Tip: You can also use the provided Makefile helpers with the same effect:
+
+```bash
+# Using shared credentials + profile (Makefile defaults AWS_PROFILE=toy-root)
+make backup-local-profile S3_URI=s3://theshop-lake-dev/backup/redis BACKUP_DIR=./backups
+
+# Restore latest
+make restore-latest-profile S3_URI=s3://theshop-lake-dev/backup/redis
+
+# List
+make list-backups-profile S3_URI=s3://theshop-lake-dev/backup/redis
+```
+
+An `.env.example` file is included with helpful placeholders; copy it to `.env` as needed.
+
+### Dev Workspace (uv)
+
+This repo is configured as an Astral uv workspace for Python projects.
+
+- Root `pyproject.toml` declares a workspace with two members: `redis-cluster-test` and `redis-backup-tool`.
+- Use uv from the repo root to manage and run either project with a single shared lockfile.
+
+Common commands (no Docker):
+
+```bash
+# Sync all workspace projects
+uv sync
+
+# Run the test client
+uv run -p redis-cluster-test python redis-cluster-test/main.py
+
+# Run the backup tool CLI (via __main__.py)
+uv run --project redis-backup-tool python redis-backup-tool/__main__.py --help
+```
+
+### Local Dev Targets (no Docker)
+
+Use Makefile helpers to run the tool locally via uv for fast iteration:
+
+```bash
+# Sync only the backup tool project
+make dev-sync
+
+# Backup locally (profile creds)
+make dev-backup S3_URI=s3://theshop-lake-dev/backup/redis BACKUP_DIR=./backups \
+  AWS_PROFILE=toy-root MATCH='user:*' CHUNK_KEYS=10000
+
+# Restore latest from S3
+make dev-restore-latest S3_URI=s3://theshop-lake-dev/backup/redis AWS_PROFILE=toy-root
+
+# List backups
+make dev-list S3_URI=s3://theshop-lake-dev/backup/redis AWS_PROFILE=toy-root
+
+# Verify a local backup dir
+make dev-verify INPUT_DIR=./backups/redis-backup-local-YYYYmmddThhmmssZ-xxxx SAMPLE=200 \
+  AWS_PROFILE=toy-root
+```
+
+When not to use workspaces: If these projects ever need independent dependency resolution, release cadence, or isolated lockfiles, consider removing the workspace and using per-project `uv.lock` files instead. For now, a shared lock keeps versions consistent across tools that interact with the same Redis cluster.
+
+#### 1. Backup
+
+To perform a backup of your local Redis cluster and upload it to S3:
+
+```bash
+docker run --rm \
+  -e ENV_PROFILE=local \
+  -e S3_URI="s3://theshop-lake-dev/backup/redis" \
+  -v /tmp/redis-backups:/data/backups \
+  redis-backup-tool:latest backup
+```
+
+-   `-e ENV_PROFILE=local`: Connects to the local Redis cluster (ports 7001-7006 on `localhost`).
+-   `-e S3_URI="..."`: Specifies the S3 bucket and prefix for storing backups.
+-   `-v /tmp/redis-backups:/data/backups`: Mounts a local directory to store temporary backup files before S3 upload.
+-   `backup`: The command to perform a backup.
+
+You can override Redis nodes directly:
+
+```bash
+docker run --rm \
+  -e REDIS_NODES="192.168.1.10:6379,192.168.1.11:6379" \
+  -e S3_URI="s3://theshop-lake-dev/backup/redis" \
+  -v /tmp/redis-backups:/data/backups \
+  redis-backup-tool:latest backup --match "user:*" --chunk-keys 10000
+```
+
+#### 2. Restore
+
+To restore the latest backup from S3 to your local Redis cluster:
+
+```bash
+docker run --rm \
+  -e ENV_PROFILE=local \
+  -e S3_URI="s3://theshop-lake-dev/backup/redis" \
+  -v /tmp:/tmp \
+  redis-backup-tool:latest restore --from-s3 latest --overwrite
+```
+
+-   `--from-s3 latest`: Downloads the most recent backup from the specified S3 URI. You can also specify a `backup-id` (e.g., `--from-s3 redis-backup-local-20231027T103000Z-abcdef12`).
+-   `--overwrite`: Overwrites existing keys in the Redis cluster. Omit this flag to skip existing keys.
+
+#### 3. List Backups
+
+To list all available backups in a specific S3 location:
+
+```bash
+docker run --rm \
+  -e S3_URI="s3://theshop-lake-dev/backup/redis" \
+  redis-backup-tool:latest list
+```
+
+#### 4. Verify Backup
+
+To verify a local backup directory against a live Redis cluster (e.g., after downloading it manually or from a previous backup run):
+
+```bash
+docker run --rm \
+  -e ENV_PROFILE=local \
+  -v /tmp/my-downloaded-backup:/in \
+  redis-backup-tool:latest verify -i /in --sample 500
+```
+
+-   `-v /tmp/my-downloaded-backup:/in`: Mounts your local backup directory into the container.
+-   `-i /in`: Specifies the input directory inside the container.
+-   `--sample 500`: Checks a sample of 500 keys for existence and TTL.
+
+For more details on arguments and environment variables, refer to the tool's help:
+
+```bash
+docker run --rm redis-backup-tool:latest --help
+docker run --rm redis-backup-tool:latest backup --help
+# etc.
+```
+
+### UV Workspace 사용법
+
+루트 `pyproject.toml`로 `redis-cluster-test`, `redis-backup-tool`을 하나의 uv 워크스페이스로 통합했습니다.
+
+- 실행 예시
+  - `uv run -p redis-cluster-test python redis-cluster-test/main.py`
+  - `uv run -p redis-backup-tool redis-backup-tool --help`
+  - `uv run -p redis-backup-tool redis-backup-tool backup -e local -o /tmp/redis-backups`
+
+### Notes and Known Issues
+
+- Docker Desktop on macOS does not support `network_mode: host`. The `redis-1`…`redis-6` services in `docker-compose.yml` use host networking and are intended for Linux environments. On macOS, consider using Colima with host networking, or adapt the compose to bridge networking and adjust cluster creation accordingly.
+- The `p3x-redis-ui` service expects an external network `dev_net`. Create it once with `docker network create dev_net`, or switch it to the default network if you don’t need an external shared network.

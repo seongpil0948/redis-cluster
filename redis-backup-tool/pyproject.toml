@@ -1,0 +1,13 @@
+[project]
+name = "redis-backup-tool"
+version = "0.1.0"
+description = "Logical backup/restore tool for Redis Cluster with S3 integration"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "redis>=5.0.0",
+    "boto3>=1.28.0",
+]
+
+[project.scripts]
+redis-backup-tool = "cli:main"

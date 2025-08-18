@@ -1,0 +1,6 @@
+[tool.uv.workspace]
+members = [
+    "redis-cluster-test",
+    "redis-backup-tool",
+]
+
