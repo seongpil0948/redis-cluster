@@ -1,20 +1,43 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Generate additional data types to broaden coverage:
-# List, Set, Sorted Set, Stream
+# Generate comprehensive test data covering all major Redis data types:
+# String (user:*), Hash (profile:*), List (queue:*), Set (tags:*), Sorted Set (leaderboard:*), Stream (stream:events:*)
 # Usage: IP=10.101.99.145 PORT=7001 ./scripts/gen_test_data.sh
 
 IP=${IP:-10.101.99.145}
 PORT=${PORT:-7001}
 
 # Tunables (kept modest for speed)
+STRING_N=${STRING_N:-10000}  # String keys for user:*
+HASH_N=${HASH_N:-10000}      # Hash keys for profile:*
 LIST_N=${LIST_N:-1000}
 SET_N=${SET_N:-1000}
 ZSET_N=${ZSET_N:-1000}
 STREAM_N=${STREAM_N:-10}
 
 echo "[gen_test_data] Using IP=$IP PORT=$PORT"
+
+# String
+echo "[gen_test_data] Creating $STRING_N string keys (user:*)..."
+for i in $(seq 1 "$STRING_N"); do
+  redis-cli -h "$IP" -p "$PORT" -c set "user:$i" "user_data_$i" >/dev/null || {
+    echo "ERROR set user:$i"; exit 1; }
+  if (( i % 1000 == 0 )); then echo "  progress strings: $i/$STRING_N"; fi
+done
+
+# Hash
+echo "[gen_test_data] Creating $HASH_N hash keys (profile:*)..."
+for i in $(seq 1 "$HASH_N"); do
+  redis-cli -h "$IP" -p "$PORT" -c hset "profile:$i" \
+    "name" "User$i" \
+    "email" "user$i@example.com" \
+    "age" $((20 + (i % 80))) \
+    "city" "City$((i % 100))" \
+    "score" $((i * 10)) >/dev/null || {
+    echo "ERROR hset profile:$i"; exit 1; }
+  if (( i % 1000 == 0 )); then echo "  progress hashes: $i/$HASH_N"; fi
+done
 
 # List
 echo "[gen_test_data] Creating $LIST_N list keys (queue:*)..."
