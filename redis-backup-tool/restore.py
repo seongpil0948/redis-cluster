@@ -97,7 +97,7 @@ def run_restore(args) -> int:
         if not loc:
             raise SystemExit("S3_URI is required for --from-s3")
         s3 = get_s3_client()
-        backups = list_backups(s3, loc)
+        backups = list_backups(s3, loc, env_profile=cfg.env_profile)
         if not backups:
             raise SystemExit("No backups found in S3")
         # Choose backup
@@ -105,11 +105,9 @@ def run_restore(args) -> int:
         if args.from_s3 == "by-id":
             if not args.backup_id:
                 raise SystemExit("--backup-id is required when using --from-s3 by-id")
-            match_key = (
-                f"{loc.prefix}/{args.backup_id}.tar.gz" if loc.prefix else f"{args.backup_id}.tar.gz"
-            )
             for item in backups:
-                if item["key"] == match_key:
+                # Keys are under env subfolder; match by filename suffix
+                if item["key"].endswith(f"/{args.backup_id}.tar.gz") or item["key"].endswith(f"{args.backup_id}.tar.gz"):
                     chosen = item
                     break
             if not chosen:
@@ -119,7 +117,7 @@ def run_restore(args) -> int:
         # Download and extract
         tar_local = Path(args.work_dir) / Path(chosen["key"]).name
         print("Downloading backup from S3:", chosen["key"])
-        download_file(s3, loc, Path(chosen["key"]).name, str(tar_local))
+        download_file(s3, loc, cfg.env_profile, Path(chosen["key"]).name, str(tar_local))
         input_dir = _extract_tar(tar_local, Path(args.work_dir))
     else:
         raise SystemExit("One of --input or --from-s3 is required")

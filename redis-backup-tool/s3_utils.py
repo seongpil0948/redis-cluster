@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import boto3
 
@@ -30,9 +31,21 @@ def get_s3_client():
     # boto3 respects env vars, shared credentials, and role providers
     return boto3.client("s3")
 
+def _env_subprefix(loc: S3Location, env_profile: str) -> str:
+    env = (env_profile or "").strip().lower()
+    # Place backups under <prefix>/<env> (e.g., backup/redis/dev)
+    if loc.prefix:
+        return f"{loc.prefix}/{env}" if env else loc.prefix
+    return env
 
-def list_backups(s3: any, loc: S3Location) -> list[dict]:
-    prefix = loc.prefix + "/" if loc.prefix else ""
+
+def list_backups(s3: Any, loc: S3Location, env_profile: str | None = None) -> list[dict]:
+    # Restrict listing to env-specific path for isolation
+    if env_profile:
+        base_prefix = _env_subprefix(loc, env_profile)
+    else:
+        base_prefix = loc.prefix
+    prefix = base_prefix + "/" if base_prefix else ""
     paginator = s3.get_paginator("list_objects_v2")
     items: list[dict] = []
     for page in paginator.paginate(Bucket=loc.bucket, Prefix=prefix):
@@ -50,13 +63,25 @@ def list_backups(s3: any, loc: S3Location) -> list[dict]:
     return items
 
 
-def upload_file(s3: any, loc: S3Location, local_path: str, dest_name: str) -> str:
-    key = f"{loc.prefix}/{dest_name}" if loc.prefix else dest_name
+def upload_file(
+    s3: Any,
+    loc: S3Location,
+    env_profile: str,
+    local_path: str,
+    dest_name: str,
+) -> str:
+    # Store under env-specific subpath
+    base = _env_subprefix(loc, env_profile)
+    key = f"{base}/{dest_name}" if base else dest_name
     s3.upload_file(local_path, loc.bucket, key)
     return f"s3://{loc.bucket}/{key}"
 
 
-def download_file(s3: any, loc: S3Location, key_name: str, local_path: str) -> str:
-    key = f"{loc.prefix}/{key_name}" if loc.prefix else key_name
+def download_file(
+    s3: Any, loc: S3Location, env_profile: str, key_name: str, local_path: str
+) -> str:
+    # Read from env-specific subpath
+    base = _env_subprefix(loc, env_profile)
+    key = f"{base}/{key_name}" if base else key_name
     s3.download_file(loc.bucket, key, local_path)
     return local_path

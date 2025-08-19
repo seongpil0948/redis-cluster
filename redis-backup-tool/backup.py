@@ -126,7 +126,7 @@ def run_backup(args) -> int:
         if not loc:
             raise SystemExit("Invalid S3 URI")
         s3 = get_s3_client()
-        s3_uri = upload_file(s3, loc, str(tar_path), tar_path.name)
+        s3_uri = upload_file(s3, loc, cfg.env_profile, str(tar_path), tar_path.name)
         print(f"Uploaded: {s3_uri}")
 
     return 0

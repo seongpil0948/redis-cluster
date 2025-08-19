@@ -2,11 +2,19 @@
 
 Logical backup and restore for Redis Cluster with S3 integration.
 
+S3 layout is environment-scoped to prevent cross-environment restores. Given an S3 URI like `s3://bucket/backup/redis`, backups are stored under:
+
+- `s3://bucket/backup/redis/local/…`
+- `s3://bucket/backup/redis/dev/…`
+- `s3://bucket/backup/redis/prd/…`
+
+All list/restore operations automatically restrict to the selected `--env-profile`.
+
 ## Commands
 
 - `backup`: Dumps keys to JSONL parts, preserves TTLs, captures stream groups, archives to `.tar.gz`, and optionally uploads to S3.
-- `restore`: Restores from a local directory or `.tar.gz` (or downloads from S3), with `--overwrite` and `--recreate-stream-groups` options.
-- `list`: Lists available backup archives in S3 under the configured prefix.
+- `restore`: Restores from a local directory or `.tar.gz` (or downloads from S3), with `--overwrite` and `--recreate-stream-groups` options. When using S3, selection is scoped to the env.
+- `list`: Lists available backup archives in S3 under the configured prefix and the selected environment.
 - `verify`: Samples keys from a local backup dir and checks existence/TTL against the live cluster.
 
 ## Common environment
@@ -17,7 +25,7 @@ Logical backup and restore for Redis Cluster with S3 integration.
 
 ## Examples
 
-Backup locally and upload to S3
+Backup locally and upload to S3 (stored under `<prefix>/<env>/...`)
 
 ```bash
 docker run --rm \
@@ -27,7 +35,7 @@ docker run --rm \
   redis-backup-tool:latest backup --match "user:*" --chunk-keys 10000
 ```
 
-Restore latest from S3
+Restore latest from S3 (scoped to the env)
 
 ```bash
 docker run --rm \
@@ -37,7 +45,7 @@ docker run --rm \
   redis-backup-tool:latest restore --from-s3 latest --overwrite
 ```
 
-List backups in S3
+List backups in S3 (scoped to the env)
 
 ```bash
 docker run --rm \

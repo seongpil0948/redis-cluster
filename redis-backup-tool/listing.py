@@ -8,7 +8,9 @@ def run_list(args) -> int:
     if not loc:
         raise SystemExit("S3_URI is required to list backups")
     s3 = get_s3_client()
-    items = list_backups(s3, loc)
+    # Filter listing by env profile for isolation
+    env_profile = getattr(args, "env_profile", None)
+    items = list_backups(s3, loc, env_profile=env_profile)
     if not items:
         print("No backups found.")
         return 0
