@@ -13,8 +13,7 @@ from redis_common import (
     DEFAULT_TEST_KEYS,
 )
 
-# 환경 설정
-env: Environment = "local"
+import argparse
 
 
 def run_data_tests(rc: RedisCluster) -> dict:
@@ -51,10 +50,26 @@ def run_data_tests(rc: RedisCluster) -> dict:
     # SET 테스트
     print("Testing SET operations...")
     rc.sadd("test:set", "member1", "member2", "member1")  # member1 중복
+    try:
+        set_members = rc.smembers("test:set")
+        # Handle different response types safely
+        if hasattr(set_members, "__await__"):
+            set_value = "awaitable_response"
+        elif isinstance(set_members, set):
+            set_value = sorted(list(set_members))
+        else:
+            # Try to convert safely with type ignore for dynamic types
+            try:
+                set_value = list(set_members)  # type: ignore
+            except (TypeError, AttributeError):
+                set_value = str(set_members)
+    except Exception as e:
+        set_value = f"error: {e}"
+
     tests["set"] = {
         "operation": "SADD/SMEMBERS",
         "key": "test:set",
-        "value": list(rc.smembers("test:set")),
+        "value": set_value,
     }
 
     # 멀티키 테스트
@@ -76,6 +91,16 @@ def run_data_tests(rc: RedisCluster) -> dict:
 
 def main():
     """Redis 클러스터에 연결하여 테스트를 실행하고 결과를 저장합니다."""
+    parser = argparse.ArgumentParser(description="Redis 클러스터 기본 테스트")
+    parser.add_argument(
+        "--env",
+        choices=["local", "dev", "prd"],
+        default="local",
+        help="실행할 환경 (기본값: local)",
+    )
+    args = parser.parse_args()
+    env: Environment = args.env
+
     result = {
         "timestamp": datetime.now().isoformat(),
         "connection": {"status": "pending", "nodes": format_nodes_list(env)},
@@ -87,7 +112,7 @@ def main():
     rc = None
     try:
         # 클러스터 연결
-        print("🔗 Connecting to Redis cluster...")
+        print(f"🔗 Connecting to Redis cluster ({env} environment)...")
         rc = create_redis_cluster(env)
         rc.ping()
 
@@ -111,9 +136,18 @@ def main():
         # 전체 키 목록 조회
         print("🔍 Getting all keys from cluster...")
         all_keys = rc.keys(target_nodes=RedisCluster.ALL_NODES)
+        # Handle different response types for keys
+        try:
+            if hasattr(all_keys, "__len__"):
+                key_count = len(all_keys)  # type: ignore
+            else:
+                key_count = 0
+        except (TypeError, AttributeError):
+            key_count = 0
+
         result["tests"]["all_keys"] = {
             "operation": "KEYS *",
-            "count": len(all_keys),
+            "count": key_count,
             "keys": all_keys,
         }
 
@@ -145,7 +179,7 @@ def main():
 
         # 결과 저장
         try:
-            save_json_results(result, "cluster_info")
+            save_json_results(result, f"cluster-info-{env}")
         except Exception as e:
             print(f"❌ Failed to save results: {e}")
 

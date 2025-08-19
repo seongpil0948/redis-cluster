@@ -1,5 +1,3 @@
-
-
 # --- Load environment early --------------------------------------------------
 # Load variables from .env.local (if present) before any targets/commands run.
 # This allows you to keep local overrides for items like S3_URI, AWS_PROFILE,
@@ -17,7 +15,7 @@ endif
 
 .PHONY: all up down clean gen-conf logs build-backup-tool ecr-login push-backup-tool-to-ecr \
 	backup-local-profile restore-latest-profile list-backups-profile \
-	dev-sync dev-backup dev-restore-latest dev-list dev-verify
+	dev-sync backup dev-restore-latest dev-list dev-verify
 
 # Variables
 CONF_DIR := $(shell pwd)
@@ -61,7 +59,7 @@ all: up
 up: gen-conf
 	$(DOCKER_COMPOSE) up -d
 
-down: 
+down:
 	$(DOCKER_COMPOSE) down
 
 clean: down
@@ -92,8 +90,8 @@ ecr-login:
 	@echo "Logging in to ECR: $(ECR_REGISTRY) (region=$(ECR_REGION))"
 	@sh -c 'PROFILE_ARG=""; \
 	  if [ -n "$(AWS_PROFILE)" ]; then PROFILE_ARG="--profile $(AWS_PROFILE)"; fi; \
-	echo "Using AWS_PROFILE: $(AWS_PROFILE)"; \
-	aws ecr get-login-password --region "$(ECR_REGION)" $$PROFILE_ARG | docker login --username AWS --password-stdin "$(ECR_REGISTRY)"'
+	 echo "Using AWS_PROFILE: $(AWS_PROFILE)"; \
+	 aws ecr get-login-password --region "$(ECR_REGION)" $$PROFILE_ARG | docker login --username AWS --password-stdin "$(ECR_REGISTRY)"'
 
 pull-backup: ecr-login
 	@if [ -z "$(ECR_REGISTRY)" ]; then \
@@ -121,78 +119,176 @@ push-backup-tool-to-ecr: build-backup-tool ecr-login
 	docker tag redis-backup-tool:latest "$(ECR_REGISTRY)/$(ECR_REPO):latest"
 	docker push "$(ECR_REGISTRY)/$(ECR_REPO):latest"
 
-# ---------- Convenience targets for redis-backup-tool ----------
-# These targets forward your current shell's AWS env automatically when present.
-# Set S3_URI and optionally BACKUP_DIR. For profile-based auth, set AWS_PROFILE
-# and ensure $(HOME)/.aws is populated.
 
-backup-local-profile: ## Run backup (shared creds + profile)
+
+# ---------- Local Development & CI Targets (uv) ----------
+# These targets run the tools locally using uv, which is faster for development.
+# They rely on the centralized ./config.json for node addresses.
+
+# Ensure dependencies are installed before running any target
+.PHONY: sync
+sync:
+	uv sync
+
+# --- Internal Generic Targets (called by env-specific targets below) ---
+.PHONY: _backup _restore-latest _restore-id _list-backups _verify-backup
+
+_backup: sync
 	@if [ -z "$(S3_URI)" ]; then echo "S3_URI is required"; exit 1; fi
+	@if [ -z "$(ENV_PROFILE)" ]; then echo "ENV_PROFILE is required (e.g., local, dev, prd)"; exit 1; fi
+	@echo "--- Running backup for [$(ENV_PROFILE)] to [$(S3_URI)] ---"
 	@mkdir -p "$(BACKUP_DIR)"
-	docker run --rm \
-	  -e ENV_PROFILE=local \
-	  -e S3_URI="$(S3_URI)" \
-	  -e AWS_PROFILE="$(AWS_PROFILE)" \
-	  -e AWS_SDK_LOAD_CONFIG=1 \
-	  $(if $(REDIS_NODES_OVERRIDE),-e REDIS_NODES="$(REDIS_NODES_OVERRIDE)",) \
-	  -v "$(HOME)/.aws":"/root/.aws":ro \
-	  -v "$(BACKUP_DIR)":"/data/backups" \
-	  $(BACKUP_IMAGE) backup
+	AWS_PROFILE="$(AWS_PROFILE)" AWS_SDK_LOAD_CONFIG=1 S3_URI="$(S3_URI)" REDIS_NODES= \
+	  uv run -- \
+	  python redis-backup-tool/__main__.py backup --env-profile "$(ENV_PROFILE)" --out-dir "$(BACKUP_DIR)" --s3-uri "$(S3_URI)"
 
-restore-latest-profile: ## Restore latest from S3 (shared creds + profile)
+_restore-latest: sync
 	@if [ -z "$(S3_URI)" ]; then echo "S3_URI is required"; exit 1; fi
-	docker run --rm \
-	  -e ENV_PROFILE=local \
-	  -e S3_URI="$(S3_URI)" \
-	  -e AWS_PROFILE="$(AWS_PROFILE)" \
-	  -e AWS_SDK_LOAD_CONFIG=1 \
-	  $(if $(REDIS_NODES_OVERRIDE),-e REDIS_NODES="$(REDIS_NODES_OVERRIDE)",) \
-	  -v "$(HOME)/.aws":"/root/.aws":ro \
-	  $(BACKUP_IMAGE) restore --from-s3 latest --overwrite
+	@if [ -z "$(ENV_PROFILE)" ]; then echo "ENV_PROFILE is required (e.g., local, dev, prd)"; exit 1; fi
+	@echo "--- Restoring latest backup for [$(ENV_PROFILE)] from [$(S3_URI)] ---"
+	AWS_PROFILE="$(AWS_PROFILE)" AWS_SDK_LOAD_CONFIG=1 REDIS_NODES= \
+	  uv run -- \
+	  python redis-backup-tool/__main__.py restore --env-profile "$(ENV_PROFILE)" --from-s3 latest --s3-uri "$(S3_URI)" --overwrite
 
-list-backups-profile: ## List S3 backups (shared creds + profile)
+_restore-id: sync
 	@if [ -z "$(S3_URI)" ]; then echo "S3_URI is required"; exit 1; fi
-	docker run --rm \
-	  -e S3_URI="$(S3_URI)" \
-	  -e AWS_PROFILE="$(AWS_PROFILE)" \
-	  -e AWS_SDK_LOAD_CONFIG=1 \
-	  $(if $(REDIS_NODES_OVERRIDE),-e REDIS_NODES="$(REDIS_NODES_OVERRIDE)",) \
-	  -v "$(HOME)/.aws":"/root/.aws":ro \
-	  $(BACKUP_IMAGE) list
+	@if [ -z "$(BACKUP_ID)" ]; then echo "BACKUP_ID is required"; exit 1; fi
+	@if [ -z "$(ENV_PROFILE)" ]; then echo "ENV_PROFILE is required (e.g., local, dev, prd)"; exit 1; fi
+	@echo "--- Restoring backup [$(BACKUP_ID)] for [$(ENV_PROFILE)] from [$(S3_URI)] ---"
+	AWS_PROFILE="$(AWS_PROFILE)" AWS_SDK_LOAD_CONFIG=1 REDIS_NODES= \
+	  uv run -- \
+	  python redis-backup-tool/__main__.py restore --env-profile "$(ENV_PROFILE)" --from-s3 "$(BACKUP_ID)" --s3-uri "$(S3_URI)" --overwrite
 
-# ---------- Local dev (no Docker) using uv ----------
-dev-sync:
-	VIRTUAL_ENV= uv sync --project redis-backup-tool
-
-dev-backup: ## Run backup locally via uv
+_list-backups: sync
 	@if [ -z "$(S3_URI)" ]; then echo "S3_URI is required"; exit 1; fi
-	@mkdir -p "$(BACKUP_DIR)"
-	VIRTUAL_ENV= uv sync --project redis-backup-tool >/dev/null
-	AWS_PROFILE="$(AWS_PROFILE)" AWS_SDK_LOAD_CONFIG=1 S3_URI="$(S3_URI)" VIRTUAL_ENV= \
-	  $(if $(REDIS_NODES_OVERRIDE),REDIS_NODES="$(REDIS_NODES_OVERRIDE)",) \
-	  uv run --project redis-backup-tool \
-	  python redis-backup-tool/__main__.py backup --match "$(MATCH)" --chunk-keys $(or $(CHUNK_KEYS),5000)
+	AWS_PROFILE="$(AWS_PROFILE)" AWS_SDK_LOAD_CONFIG=1 REDIS_NODES= \
+	  uv run -- \
+	  python redis-backup-tool/__main__.py list --s3-uri "$(S3_URI)"
 
-dev-restore-latest: ## Restore latest from S3 locally via uv
-	@if [ -z "$(S3_URI)" ]; then echo "S3_URI is required"; exit 1; fi
-	VIRTUAL_ENV= uv sync --project redis-backup-tool >/dev/null
-	AWS_PROFILE="$(AWS_PROFILE)" AWS_SDK_LOAD_CONFIG=1 VIRTUAL_ENV= \
-	  $(if $(REDIS_NODES_OVERRIDE),REDIS_NODES="$(REDIS_NODES_OVERRIDE)",) \
-	  uv run --project redis-backup-tool \
-	  python redis-backup-tool/__main__.py restore --from-s3 latest --overwrite
-
-dev-list: ## List S3 backups locally via uv
-	@if [ -z "$(S3_URI)" ]; then echo "S3_URI is required"; exit 1; fi
-	VIRTUAL_ENV= uv sync --project redis-backup-tool >/dev/null
-	AWS_PROFILE="$(AWS_PROFILE)" AWS_SDK_LOAD_CONFIG=1 VIRTUAL_ENV= \
-	  $(if $(REDIS_NODES_OVERRIDE),REDIS_NODES="$(REDIS_NODES_OVERRIDE)",) \
-	  uv run --project redis-backup-tool \
-	  python redis-backup-tool/__main__.py list
-
-dev-verify: ## Verify local backup dir against cluster via uv
+_verify-backup: sync
 	@if [ -z "$(INPUT_DIR)" ]; then echo "INPUT_DIR is required (path to backup dir)"; exit 1; fi
-	VIRTUAL_ENV= uv sync --project redis-backup-tool >/dev/null
-	AWS_PROFILE="$(AWS_PROFILE)" AWS_SDK_LOAD_CONFIG=1 VIRTUAL_ENV= \
-	  $(if $(REDIS_NODES_OVERRIDE),REDIS_NODES="$(REDIS_NODES_OVERRIDE)",) \
-	  uv run --project redis-backup-tool \
-	  python redis-backup-tool/__main__.py verify -i "$(INPUT_DIR)" --sample $(or $(SAMPLE),200)
+	@if [ -z "$(ENV_PROFILE)" ]; then echo "ENV_PROFILE is required (e.g., local, dev, prd)"; exit 1; fi
+	AWS_PROFILE="$(AWS_PROFILE)" AWS_SDK_LOAD_CONFIG=1 REDIS_NODES= \
+	  uv run -- \
+	  python redis-backup-tool/__main__.py verify --env-profile "$(ENV_PROFILE)" -i "$(INPUT_DIR)" --sample $$(or $$(SAMPLE),200)
+
+
+# --- User-facing Backup & Restore Targets ---
+.PHONY: backup-local backup-dev backup-prd \
+        restore-latest-local restore-latest-dev restore-latest-prd \
+        restore-id-local restore-id-dev restore-id-prd \
+        list-backups \
+        verify-backup-local verify-backup-dev verify-backup-prd
+
+backup-local: ENV_PROFILE=local
+backup-local: _backup
+backup-dev: ENV_PROFILE=dev
+backup-dev: _backup
+backup-prd: ENV_PROFILE=prd
+backup-prd: _backup
+
+restore-latest-local: ENV_PROFILE=local
+restore-latest-local: _restore-latest
+restore-latest-dev: ENV_PROFILE=dev
+restore-latest-dev: _restore-latest
+restore-latest-prd: ENV_PROFILE=prd
+restore-latest-prd: _restore-latest
+
+restore-id-local: ENV_PROFILE=local
+restore-id-local: _restore-id
+restore-id-dev: ENV_PROFILE=dev
+restore-id-dev: _restore-id
+restore-id-prd: ENV_PROFILE=prd
+restore-id-prd: _restore-id
+
+list-backups: _list-backups
+
+verify-backup-local: ENV_PROFILE=local
+verify-backup-local: _verify-backup
+verify-backup-dev: ENV_PROFILE=dev
+verify-backup-dev: _verify-backup
+verify-backup-prd: ENV_PROFILE=prd
+verify-backup-prd: _verify-backup
+
+
+
+# ---------- Testing Targets ----------
+.PHONY: test-cluster-local test-cluster-dev test-cluster-prd poll-cluster-local poll-cluster-dev poll-cluster-prd
+
+test-cluster-local:
+	uv run -- python redis-cluster-test/main.py --env local
+
+test-cluster-dev:
+	uv run -- python redis-cluster-test/main.py --env dev
+
+test-cluster-prd:
+	uv run -- python redis-cluster-test/main.py --env prd
+
+poll-cluster-local:
+	uv run -- python redis-cluster-test/polling_app.py --env local --duration 60
+
+poll-cluster-dev:
+	uv run -- python redis-cluster-test/polling_app.py --env dev --duration 60
+
+poll-cluster-prd:
+	uv run -- python redis-cluster-test/polling_app.py --env prd --duration 60
+
+# ---------- Destructive Operations ----------
+.PHONY: flush-local-cluster
+
+flush-local-cluster:
+	@echo "🚨 WARNING: This will run FLUSHALL on all nodes in the 'local' cluster (10.101.99.145:7001-7006)."
+	@echo "Discovering master nodes..."; \
+	PRIMARIES=$$(redis-cli -h 10.101.99.145 -p 7001 cluster nodes \
+	  | awk '$$3 ~ /master/ && $$3 !~ /fail/ { split($$2,a,"@"); print a[1] }' \
+	  | sort -n | uniq); \
+	if [ -z "$$PRIMARIES" ]; then \
+	  echo "No master nodes found or unable to query cluster topology."; \
+	  exit 1; \
+	fi; \
+	echo "Master nodes:"; \
+	for p in $$PRIMARIES; do echo "  - $$p"; done; \
+	echo "Running FLUSHALL on masters..."; \
+	for p in $$PRIMARIES; do \
+	  echo "Flushing $$p..."; \
+	  redis-cli -h $${p%:*} -p $${p#*:} flushall; \
+	done
+	@echo "✨ Cluster flush complete."
+
+# ---------- Cluster Status Targets ----------
+.PHONY: status-local status-dev status-prd
+
+# Helper to get the first host:port for a given environment from config.json
+get_entry_node = $(shell jq -r '.redis_nodes."$(1)".nodes[0]' config.json)
+
+# Generic status target
+.PHONY: _status
+_status:
+	@if [ -z "$(ENV_PROFILE)" ]; then echo "ENV_PROFILE is required"; exit 1; fi
+	@NODE=$(call get_entry_node,$(ENV_PROFILE)); \
+	if [ -z "$$NODE" ] || [ "$$NODE" = "null" ]; then \
+		echo "No nodes found for profile $(ENV_PROFILE) in config.json"; \
+		exit 1; \
+	fi; \
+	IP=$${NODE%:*}; \
+	PORT=$${NODE#*:}; \
+	echo "--- Getting status for [$(ENV_PROFILE)] cluster (entrypoint: $$IP:$$PORT) ---"; \
+	PRIMARIES=$$(redis-cli -h $$IP -p $$PORT cluster nodes \
+	  | awk '$$3 ~ /master/ && $$3 !~ /fail/ { split($$2,a,"@"); print a[1] }' \
+	  | sort -n | uniq); \
+	echo "Primary nodes:"; \
+	for p in $$PRIMARIES; do \
+		echo -n "  - Node $$p "; \
+		redis-cli -h $${p%:*} -p $${p#*:} dbsize | awk '{printf "(%s keys)\n", $$1}'; \
+	done; \
+	TOTAL=$$(for p in $$PRIMARIES; do redis-cli -h $${p%:*} -p $${p#*:} dbsize; done | awk '{s+=$$1} END{print s}'); \
+	echo "Total keys across all primaries: $$TOTAL";
+
+status-local: ENV_PROFILE=local
+status-local: _status
+
+status-dev: ENV_PROFILE=dev
+status-dev: _status
+
+status-prd: ENV_PROFILE=prd
+status-prd: _status

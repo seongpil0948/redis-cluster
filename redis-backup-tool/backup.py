@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+
 from redis_utils import (
     build_cluster_config,
     make_cluster_client,
@@ -14,7 +15,6 @@ from redis_utils import (
     pttl_safe,
 )
 from s3_utils import parse_s3_uri, get_s3_client, upload_file
-
 
 def _gen_backup_id(env_profile: str) -> str:
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -33,6 +33,7 @@ def _write_jsonl_part(out_dir: Path, part_idx: int, rows: list[dict[str, Any]]) 
 
 def _dump_key(r, key: str) -> dict[str, Any] | None:
     t = key_type(r, key)
+
     ttl = pttl_safe(r, key)
     row: dict[str, Any]
     if t == "string":

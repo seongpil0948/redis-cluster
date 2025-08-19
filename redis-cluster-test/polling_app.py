@@ -9,9 +9,11 @@ Redis 클러스터 무중단 업데이트 테스트를 위한 폴링 애플리�
 import time
 import json
 import signal
+import argparse
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict
+from redis.cluster import RedisCluster
 
 # 공통 모듈 import
 from redis_common import (
@@ -21,9 +23,6 @@ from redis_common import (
     save_json_results,
     POLLING_KEY_PATTERNS,
 )
-
-# 환경 설정
-env: Environment = "local"
 
 
 @dataclass
@@ -43,13 +42,15 @@ class PollingResult:
 class RedisClusterPoller:
     """Redis 클러스터 폴링 테스트 관리자"""
 
-    def __init__(self, test_key_count: int = 50):
+    def __init__(self, env: Environment, test_key_count: int = 50):
         """
         Args:
+            env: 실행 환경 ('local', 'dev', 'prd')
             test_key_count: 테스트할 키의 개수 (여러 샤드에 분산됨)
         """
+        self.env = env
         self.test_key_count = test_key_count
-        self.rc = None
+        self.rc: Optional[RedisCluster] = None
         self.running = False
         self.cycle_count = 0
         self.total_stats = {
@@ -63,16 +64,22 @@ class RedisClusterPoller:
     def connect(self) -> bool:
         """Redis 클러스터에 연결"""
         try:
-            print(f"🔗 Connecting to Redis cluster ({env} environment)...")
+            print(f"🔗 Connecting to Redis cluster ({self.env} environment)...")
             self.rc = create_redis_cluster(
-                env, health_check_interval=5, socket_connect_timeout=2, socket_timeout=2
+                self.env,  # type: ignore - env is already validated in main()
+                health_check_interval=5,
+                socket_connect_timeout=2,
+                socket_timeout=2,
             )
-            self.rc.ping()
+            if self.rc:
+                self.rc.ping()
 
-            print("✅ Connected successfully!")
-            print_cluster_nodes(self.rc, "Available nodes")
+                print("✅ Connected successfully!")
+                print_cluster_nodes(self.rc, "Available nodes")
 
-            return True
+                return True
+            else:
+                return False
 
         except Exception as e:
             print(f"❌ Connection failed: {e}")
@@ -111,6 +118,9 @@ class RedisClusterPoller:
 
     def run_polling_cycle(self, cycle: int) -> PollingResult:
         """단일 폴링 사이클 실행"""
+        if not self.rc:
+            raise RuntimeError("Redis cluster not connected")
+
         success_count = 0
         error_count = 0
         errors = []
@@ -160,11 +170,17 @@ class RedisClusterPoller:
                     success_count += 1
                     # 데이터 무결성 검증
                     try:
-                        data = json.loads(retrieved_value)
-                        if data.get("cycle") != cycle:
+                        # Handle different response types
+                        if hasattr(retrieved_value, "__await__"):
+                            # If it's awaitable, we can't process it synchronously
                             error_count += 1
-                            errors.append(f"GET {key}: cycle mismatch")
-                    except json.JSONDecodeError:
+                            errors.append(f"GET {key}: got awaitable response")
+                        else:
+                            data = json.loads(str(retrieved_value))  # type: ignore
+                            if data.get("cycle") != cycle:
+                                error_count += 1
+                                errors.append(f"GET {key}: cycle mismatch")
+                    except (json.JSONDecodeError, AttributeError, TypeError):
                         error_count += 1
                         errors.append(f"GET {key}: invalid JSON")
                 else:
@@ -228,7 +244,7 @@ class RedisClusterPoller:
         """결과를 JSON 파일로 저장"""
         output_data = {
             "test_info": {
-                "environment": env,
+                "environment": self.env,
                 "test_key_count": self.test_key_count,
                 "total_cycles": len(results),
                 "start_time": self.total_stats["start_time"],
@@ -261,7 +277,7 @@ class RedisClusterPoller:
             )
 
         try:
-            save_json_results(output_data, "polling_results")
+            save_json_results(output_data, f"polling-results-{self.env}")
         except Exception as e:
             print(f"❌ Failed to save results: {e}")
 
@@ -342,8 +358,6 @@ class RedisClusterPoller:
 
 def main():
     """메인 함수"""
-    import argparse
-
     parser = argparse.ArgumentParser(description="Redis 클러스터 폴링 테스트")
     parser.add_argument(
         "--keys", type=int, default=50, help="테스트할 키 개수 (기본값: 50)"
@@ -360,12 +374,11 @@ def main():
 
     args = parser.parse_args()
 
-    # 전역 환경 변수 설정
-    global env
-    env = args.env
+    # Type validation - ensure args.env is a valid Environment
+    env: Environment = args.env  # type: ignore - validated by argparse choices
 
     # 우아한 종료를 위한 시그널 핸들러
-    poller = RedisClusterPoller(test_key_count=args.keys)
+    poller = RedisClusterPoller(env=env, test_key_count=args.keys)
 
     def signal_handler(signum, frame):
         print(f"\n🛑 Received signal {signum}, stopping...")

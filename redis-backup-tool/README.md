@@ -64,7 +64,7 @@ uv run --project redis-backup-tool python redis-backup-tool/__main__.py --help
 
 # Makefile helpers (profile creds)
 make dev-sync
-make dev-backup S3_URI=s3://your-bucket/redis-backups BACKUP_DIR=./backups AWS_PROFILE=default
+make backup S3_URI=s3://your-bucket/redis-backups BACKUP_DIR=./backups AWS_PROFILE=default
 make dev-restore-latest S3_URI=s3://your-bucket/redis-backups AWS_PROFILE=default
 make dev-list S3_URI=s3://your-bucket/redis-backups AWS_PROFILE=default
 make dev-verify INPUT_DIR=./backups/redis-backup-local-... SAMPLE=200 AWS_PROFILE=default

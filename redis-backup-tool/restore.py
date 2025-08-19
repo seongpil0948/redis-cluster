@@ -20,8 +20,16 @@ def _extract_tar(tar_path: Path, work_dir: Path) -> Path:
 def _apply_row(rc, row: dict[str, Any], overwrite: bool, recreate_groups: bool) -> None:
     key = row["key"]
     t = row["type"]
+
+    # If overwrite is true, delete the key first.
+    # This is critical for streams and also ensures a clean slate for other types.
+    if overwrite and rc.exists(key):
+        rc.delete(key)
+
+    # If not overwriting, skip if the key already exists.
     if not overwrite and rc.exists(key):
         return
+
     if t == "string":
         rc.set(key, row["value"])  # type: ignore[arg-type]
     elif t == "hash":
@@ -92,14 +100,13 @@ def run_restore(args) -> int:
         backups = list_backups(s3, loc)
         if not backups:
             raise SystemExit("No backups found in S3")
+        # Choose backup
         chosen = backups[0] if args.from_s3 == "latest" else None
         if args.from_s3 == "by-id":
             if not args.backup_id:
                 raise SystemExit("--backup-id is required when using --from-s3 by-id")
             match_key = (
-                f"{loc.prefix}/{args.backup_id}.tar.gz"
-                if loc.prefix
-                else f"{args.backup_id}.tar.gz"
+                f"{loc.prefix}/{args.backup_id}.tar.gz" if loc.prefix else f"{args.backup_id}.tar.gz"
             )
             for item in backups:
                 if item["key"] == match_key:
@@ -107,6 +114,8 @@ def run_restore(args) -> int:
                     break
             if not chosen:
                 raise SystemExit(f"Backup id not found: {args.backup_id}")
+        if not chosen:
+            raise SystemExit("Could not determine which backup to download from S3")
         # Download and extract
         tar_local = Path(args.work_dir) / Path(chosen["key"]).name
         print("Downloading backup from S3:", chosen["key"])

@@ -10,22 +10,30 @@ from redis.cluster import RedisCluster, ClusterNode
 from redis.exceptions import RedisClusterException
 import json
 
+from pathlib import Path
+
 # 환경 타입 정의
 Environment = Literal["local", "dev", "prd"]
 
+
+def _load_cluster_nodes_from_config() -> dict:
+    """../config.json 파일에서 노드 설정을 로드합니다."""
+    config_path = Path(__file__).parent.parent / "config.json"
+    with config_path.open("r", encoding="utf-8") as f:
+        config = json.load(f)
+
+    cluster_nodes = {}
+    for env, data in config["redis_nodes"].items():
+        nodes = []
+        for node_str in data["nodes"]:
+            host, port = node_str.split(":")
+            nodes.append(ClusterNode(host, int(port)))
+        cluster_nodes[env] = nodes
+    return cluster_nodes
+
+
 # 환경별 노드 설정
-CLUSTER_NODES = {
-    "local": [ClusterNode("10.101.99.145", port) for port in range(7001, 7007)],
-    "dev": [ClusterNode("10.101.91.145", port) for port in range(7001, 7007)],
-    "prd": [
-        ClusterNode("10.101.99.20", 6400),
-        ClusterNode("10.101.99.20", 6401),
-        ClusterNode("10.101.99.21", 6400),
-        ClusterNode("10.101.99.21", 6401),
-        ClusterNode("10.101.99.22", 6400),
-        ClusterNode("10.101.99.22", 6401),
-    ],
-}
+CLUSTER_NODES = _load_cluster_nodes_from_config()
 
 
 def get_cluster_nodes(env: Environment) -> List[ClusterNode]:
